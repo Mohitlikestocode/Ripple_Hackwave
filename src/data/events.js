@@ -1,0 +1,18 @@
+export const EVENTS = [
+  { id: "petrol",   emoji: "🛢️", name: "Petrol Price +₹20",
+    description: "Crude oil prices spike, fuel costs ripple through everything" },
+  { id: "hormuz",   emoji: "🌊", name: "Strait of Hormuz Closes",
+    description: "World's most critical oil chokepoint blocked for 14 days" },
+  { id: "monsoon",  emoji: "🌧️", name: "Monsoon Failure in Maharashtra",
+    description: "60% rainfall deficit, crops wither, water tables drop" },
+  { id: "repo",     emoji: "🏦", name: "RBI Raises Repo Rate +50bps",
+    description: "Borrowing costs surge, EMIs jump, credit tightens" },
+  { id: "whatsapp", emoji: "📵", name: "WhatsApp Down for 48 Hours",
+    description: "India's business backbone goes silent" },
+  { id: "demon",    emoji: "💰", name: "Demonetization — ₹2000 Notes Banned",
+    description: "Cash-dependent economy scrambles for liquidity" },
+  { id: "cricket",  emoji: "🏏", name: "India Wins Cricket World Cup",
+    description: "A positive cascade — celebration economy booms", positive: true },
+  { id: "power",    emoji: "⚡",  name: "Electricity Tariff +30%",
+    description: "Power costs spike, cold chains break, bills pile up" },
+];
