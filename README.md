@@ -18,7 +18,7 @@ Not a dashboard. A narrative simulation engine. Palantir meets a Nolan film.
 
 ---
 
-## ⭐ Feature Friday — Week 1
+## ⭐ Feature Friday — Week 2
 
 RIPPLE has a second route — `/feature` from the landing — that is the project's
 own pitch deck rendered as one scrollable editorial page. It's the screen
