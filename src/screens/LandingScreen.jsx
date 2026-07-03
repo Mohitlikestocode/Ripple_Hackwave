@@ -367,6 +367,9 @@ export function LandingScreen({ go }) {
             <Button variant="outline" size="lg" onClick={() => go("feature")}>
               Feature Friday
             </Button>
+            <Button variant="outline" size="lg" onClick={() => go("chat")}>
+              Ask the Characters
+            </Button>
           </motion.div>
 
           <motion.div

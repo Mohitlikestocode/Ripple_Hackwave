@@ -7,13 +7,14 @@ import {
   forceCollide,
 } from "d3-force";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Loader2, RefreshCw, Settings2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Settings2, BarChart2, X } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
 import { Badge } from "../components/ui/Badge.jsx";
 import { Card } from "../components/ui/Card.jsx";
 import { AvatarToken } from "../components/ripple/AvatarToken.jsx";
 import { WaveMarker } from "../components/ripple/WaveMarker.jsx";
 import { StatReadout } from "../components/ripple/StatReadout.jsx";
+import { ImpactDashboard } from "../components/ripple/ImpactDashboard.jsx";
 import { StoryPanel } from "./StoryPanel.jsx";
 import { useReducedMotion } from "../hooks/useReducedMotion.js";
 import { simulateCascade } from "../lib/cascade.js";
@@ -140,6 +141,7 @@ export function SimulationView({ go, event, society }) {
   const [cracked, setCracked] = useState({});
   const [phase, setPhase] = useState("intro"); // intro | running | done
   const [showPulse, setShowPulse] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [chrome, setChrome] = useState(true);
   const [selId, setSelId] = useState(null);
   const timersRef = useRef([]);
@@ -430,6 +432,14 @@ export function SimulationView({ go, event, society }) {
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setShowDashboard((s) => !s)}
+          iconLeft={<BarChart2 className="h-3.5 w-3.5" />}
+        >
+          <span className="hidden md:inline">Impact Report</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={play}
           iconLeft={<RefreshCw className="h-3.5 w-3.5" />}
         >
@@ -487,6 +497,44 @@ export function SimulationView({ go, event, society }) {
                 />
               </div>
             </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Impact Dashboard Modal */}
+      <AnimatePresence>
+        {showDashboard && cascade && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowDashboard(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="bg-surface border border-subtle rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto max-w-2xl w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 border-b border-subtle bg-elevated/50 px-6 py-4 flex items-center justify-between z-10">
+                <h2 className="font-display font-bold text-lg text-primary">Impact Analysis</h2>
+                <button
+                  onClick={() => setShowDashboard(false)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-subtle text-secondary hover:text-primary hover:border-active"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6">
+                <ImpactDashboard cascade={cascade} characters={characters} />
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
