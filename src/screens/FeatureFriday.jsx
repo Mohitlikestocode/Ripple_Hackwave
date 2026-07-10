@@ -78,7 +78,7 @@ function Hero() {
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="inline-block"
         >
-          <Badge tone="blue"> · Week 1</Badge>
+          <Badge tone="blue"> · Feature Friday Week 4</Badge>
         </motion.div>
         <motion.h1
           initial={{ opacity: 0, y: 8 }}
