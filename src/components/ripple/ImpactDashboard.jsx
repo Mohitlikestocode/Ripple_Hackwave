@@ -13,7 +13,7 @@ const TONE_COLORS = {
 /**
  * Impact Dashboard - Shows societal metrics after cascade
  */
-export function ImpactDashboard({ cascade, characters }) {
+export function ImpactDashboard({ cascade, characters, connections = [] }) {
   if (!cascade) return null;
 
   const summary = cascade.summary || {};
@@ -25,7 +25,7 @@ export function ImpactDashboard({ cascade, characters }) {
   const recoveryDays = summary.recoveryDays || "?";
 
   // Calculate network resilience analysis
-  const networkAnalysis = analyzeNetworkResilience(characters, cascade);
+  const networkAnalysis = analyzeNetworkResilience(characters, cascade, connections);
 
   // Calculate society health score
   const avgIncome = characters.length > 0 

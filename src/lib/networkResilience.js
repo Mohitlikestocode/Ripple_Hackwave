@@ -10,12 +10,20 @@
  * Build a character dependency graph
  * Returns adjacency map: { characterId: [connectedIds] }
  */
-function buildDependencyGraph(characters, cascade) {
+function buildDependencyGraph(characters, cascade, connections = []) {
   const graph = {};
   
   // Initialize
   characters.forEach(c => {
     graph[c.id] = new Set();
+  });
+
+  // Seed graph from explicit character links in the builder.
+  connections.forEach((e) => {
+    if (graph[e.a] && graph[e.b]) {
+      graph[e.a].add(e.b);
+      graph[e.b].add(e.a);
+    }
   });
 
   // If cascade has waves with impacts, extract dependency patterns
@@ -138,7 +146,7 @@ function findCriticalNodes(graph, characters, cascade) {
  * Calculate intervention ROI for each character
  * ROI = (total cascade cost prevented) / (intervention cost)
  */
-function calculateInterventionROI(characters, cascade) {
+function calculateInterventionROI(characters, cascade, graph) {
   if (!cascade?.summary) return [];
 
   const totalIncomeLost = cascade.summary.incomeLost || 0;
@@ -147,8 +155,9 @@ function calculateInterventionROI(characters, cascade) {
 
   return characters.map(c => {
     // Estimate: protecting this character prevents their dependent losses
-    const connections = 1; // Simplified
-    const estimatedCostsPrevented = avgLossPerPerson * connections;
+    const connections = graph[c.id]?.size || 0;
+    const centralityWeight = Math.max(0.6, Math.min(2, connections / 2));
+    const estimatedCostsPrevented = avgLossPerPerson * Math.max(1, connections) * centralityWeight;
     
     // Rough intervention cost: 1-2 months of their income as emergency support
     const interventionCost = c.income * 1.5;
@@ -173,15 +182,15 @@ function calculateInterventionROI(characters, cascade) {
  * Main analysis function
  * Returns comprehensive network resilience report
  */
-export function analyzeNetworkResilience(characters, cascade) {
+export function analyzeNetworkResilience(characters, cascade, connections = []) {
   if (!characters?.length || !cascade?.waves) {
     return null;
   }
 
-  const graph = buildDependencyGraph(characters, cascade);
+  const graph = buildDependencyGraph(characters, cascade, connections);
   const fragility = calculateFragilityScore(graph, characters);
   const criticalNodes = findCriticalNodes(graph, characters, cascade);
-  const interventionROI = calculateInterventionROI(characters, cascade);
+  const interventionROI = calculateInterventionROI(characters, cascade, graph);
 
   // Top 3 most critical: protect these to stabilize network
   const topCritical = criticalNodes.slice(0, 3);
@@ -211,8 +220,8 @@ export function analyzeNetworkResilience(characters, cascade) {
     // Network stats
     networkStats: {
       totalCharacters: characters.length,
-      connectedPairs: Array.from(graph).reduce((sum, [_, set]) => sum + set.size, 0) / 2,
-      avgConnectionsPerCharacter: Array.from(graph).reduce((sum, [_, set]) => sum + set.size, 0) / characters.length,
+      connectedPairs: Object.values(graph).reduce((sum, set) => sum + set.size, 0) / 2,
+      avgConnectionsPerCharacter: Object.values(graph).reduce((sum, set) => sum + set.size, 0) / characters.length,
       isolatedCharacters: Object.values(graph).filter(set => set.size === 0).length,
     },
   };
