@@ -23,6 +23,24 @@ export function currentProvider() {
   return "baked";
 }
 
+/**
+ * Fallback baked responses for demo/testing mode
+ */
+function getBakedResponse(messages) {
+  const lastMessage = messages?.[messages.length - 1]?.content || "";
+  
+  // Simple demo responses based on input
+  if (lastMessage.toLowerCase().includes("hello") || lastMessage.toLowerCase().includes("hi")) {
+    return "Hello! I'm a demo AI response. Please configure an AI provider (Anthropic or Groq) for real responses.";
+  }
+  
+  if (lastMessage.toLowerCase().includes("what")) {
+    return "That's a great question! In demo mode, I can only provide placeholder responses. Set up a real AI provider to get full capabilities.";
+  }
+  
+  return "This is a demo response. Please configure VITE_AI_PROVIDER (anthropic or groq) to use real AI.";
+}
+
 export async function callClaude({
   system,
   messages,
@@ -30,13 +48,29 @@ export async function callClaude({
   signal,
 }) {
   const provider = currentProvider();
+  
   if (provider === "groq") {
     return callGroq({ system, messages, maxTokens, signal });
   }
-  if (provider !== "anthropic") {
-    throw new Error("No AI provider configured");
+  
+  if (provider === "anthropic") {
+    return callAnthropic({ system, messages, maxTokens, signal });
   }
+  
+  // Fallback to baked responses
+  if (provider === "baked") {
+    const text = getBakedResponse(messages);
+    return { 
+      text, 
+      raw: { demo: true }, 
+      provider: "baked" 
+    };
+  }
+  
+  throw new Error(`Unknown AI provider: ${provider}`);
+}
 
+async function callAnthropic({ system, messages, maxTokens, signal }) {
   const res = await fetch("/api/anthropic/v1/messages", {
     method: "POST",
     signal,
@@ -53,6 +87,7 @@ export async function callClaude({
     const text = await res.text().catch(() => "");
     throw new Error(`Claude API ${res.status}: ${text.slice(0, 200)}`);
   }
+  
   const json = await res.json();
   const text = (json.content || [])
     .filter((b) => b.type === "text")
@@ -85,6 +120,13 @@ async function callGroq({ system, messages, maxTokens, signal }) {
   }
 
   const json = await res.json();
-  const text = json?.choices?.[0]?.message?.content || "";
+  
+  // Validate response structure
+  const content = json?.choices?.[0]?.message?.content;
+  if (!content) {
+    console.warn("Groq API returned empty or malformed response:", json);
+  }
+  
+  const text = content || "";
   return { text, raw: json, provider: "groq" };
 }
