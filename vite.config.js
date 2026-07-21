@@ -7,6 +7,8 @@ export default defineConfig(({ mode }) => {
   const apiKey = env.ANTHROPIC_API_KEY || "";
   const groqKey = env.GROQ_API_KEY || "";
   const hasKey = Boolean(apiKey || groqKey);
+  
+  // Determine which AI provider to use
   const preferred = String(env.VITE_AI_PROVIDER || "auto").toLowerCase();
   let aiProvider = "baked";
   if (preferred === "anthropic" && apiKey) aiProvider = "anthropic";
@@ -34,7 +36,7 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
-	 "/api/groq": {
+        "/api/groq": {
           target: "https://api.groq.com",
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/api\/groq/, ""),
@@ -48,7 +50,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      __HAS_ANTHROPIC_KEY__: JSON.stringify(Boolean(hasKey)),
       __HAS_AI_KEY__: JSON.stringify(Boolean(hasKey)),
       __AI_PROVIDER__: JSON.stringify(aiProvider),
     },
