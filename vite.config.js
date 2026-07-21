@@ -4,8 +4,8 @@ import react from "@vitejs/plugin-react";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiKey = env.ANTHROPIC_API_KEY || "";
-  const groqKey = env.GROQ_API_KEY || "";
+  const apiKey = env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
+  const groqKey = env.GROQ_API_KEY || process.env.GROQ_API_KEY || "";
   const hasKey = Boolean(apiKey || groqKey);
 
   return {
