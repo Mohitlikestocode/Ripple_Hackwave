@@ -5,6 +5,7 @@ import { SocietyBuilder } from "./screens/SocietyBuilder.jsx";
 import { EventSelector } from "./screens/EventSelector.jsx";
 import { SimulationView } from "./screens/SimulationView.jsx";
 import { FeatureFriday } from "./screens/FeatureFriday.jsx";
+import { CharacterChatScreen } from "./screens/CharacterChatScreen.jsx";
 
 export default function App() {
   const [view, setView] = useState("landing");
@@ -40,6 +41,7 @@ export default function App() {
             <SimulationView go={setView} event={event} society={society} />
           )}
           {view === "feature" && <FeatureFriday go={setView} />}
+          {view === "chat" && <CharacterChatScreen go={setView} />}
         </motion.div>
       </AnimatePresence>
     </div>

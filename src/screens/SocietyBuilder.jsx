@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { Button } from "../components/ui/Button.jsx";
@@ -8,6 +8,7 @@ import { Input } from "../components/ui/Input.jsx";
 import { Slider } from "../components/ui/Slider.jsx";
 import { AvatarToken } from "../components/ripple/AvatarToken.jsx";
 import { VulnerabilityBar } from "../components/ripple/VulnerabilityBar.jsx";
+import { CharacterWizard } from "../components/ripple/CharacterWizard.jsx";
 import {
   ARCHETYPES,
   DEMO_CHARACTERS,
@@ -15,6 +16,12 @@ import {
   vulnerability,
 } from "../data/society.js";
 import { useLocalStorage } from "../hooks/useLocalStorage.js";
+import {
+  canonicalEdgeKey,
+  countEconomicLinks,
+  inferConnectionsForCharacter,
+  mergeUniqueConnections,
+} from "../lib/connections.js";
 
 /** Organic-looking but deterministic positions, seeded by character id. */
 function seededPosition(id, n) {
@@ -41,12 +48,34 @@ export function SocietyBuilder({ go, onReady }) {
     connections: DEMO_CONNECTIONS,
   });
 
-  const characters = useMemo(() => withPositions(stored.characters), [stored.characters]);
-  const connections = stored.connections;
+  const normalized = useMemo(() => normalizeSocietyState(stored), [stored]);
+
+  useEffect(() => {
+    if (normalized.changed) setStored(normalized.state);
+  }, [normalized, setStored]);
+
+  const characters = useMemo(() => withPositions(normalized.state.characters), [normalized.state.characters]);
+  const connections = normalized.state.connections;
 
   const [selId, setSel] = useState(null);
   const [hov, setHov] = useState(null);
+  const [showWizard, setShowWizard] = useState(false);
   const selected = selId != null ? characters.find((c) => c.id === selId) : null;
+
+  const networkStats = useMemo(() => {
+    const linked = new Set();
+    connections.forEach((e) => {
+      linked.add(e.a);
+      linked.add(e.b);
+    });
+    const isolated = characters.filter((c) => !linked.has(c.id)).length;
+    const avgDegree = characters.length ? ((connections.length * 2) / characters.length).toFixed(1) : "0.0";
+    return {
+      isolated,
+      avgDegree,
+      economicLinks: countEconomicLinks(connections),
+    };
+  }, [characters, connections]);
 
   const updateChar = (id, patch) => {
     setStored((s) => ({
@@ -66,22 +95,75 @@ export function SocietyBuilder({ go, onReady }) {
   const addFromArchetype = (key) => {
     const meta = ARCHETYPES[key];
     if (!meta) return;
-    const id = (characters.reduce((m, c) => Math.max(m, c.id), 0) || 0) + 1;
-    const tmpl = {
-      id,
-      key,
-      emoji: meta.emoji,
-      name: `New ${meta.label.split(" ")[0]}`,
-      archetype: meta.label,
-      location: "—",
-      income: 20000,
-      fixed: 9000,
-      emi: 2000,
-      savings: 3000,
-      dependencies: [],
-    };
-    setStored((s) => ({ ...s, characters: [...s.characters, tmpl] }));
-    setSel(id);
+    let createdId = null;
+    setStored((s) => {
+      const id = (s.characters.reduce((m, c) => Math.max(m, c.id), 0) || 0) + 1;
+      createdId = id;
+      const tmpl = {
+        id,
+        key,
+        emoji: meta.emoji,
+        name: `New ${meta.label.split(" ")[0]}`,
+        archetype: meta.label,
+        location: "—",
+        income: 20000,
+        fixed: 9000,
+        emi: 2000,
+        savings: 3000,
+        dependencies: [],
+      };
+      const inferred = inferConnectionsForCharacter(tmpl, s.characters, s.connections, 2);
+      return {
+        ...s,
+        characters: [...s.characters, tmpl],
+        connections: mergeUniqueConnections(s.connections, inferred),
+      };
+    });
+    setSel(createdId);
+  };
+
+  const addFromWizard = (profile) => {
+    let createdId = null;
+    setStored((s) => {
+      const id = (s.characters.reduce((m, c) => Math.max(m, c.id), 0) || 0) + 1;
+      createdId = id;
+      const character = {
+        id,
+        ...profile,
+        dependencies: [],
+      };
+      const inferred = inferConnectionsForCharacter(character, s.characters, s.connections, 3);
+      return {
+        ...s,
+        characters: [...s.characters, character],
+        connections: mergeUniqueConnections(s.connections, inferred),
+      };
+    });
+    setSel(createdId);
+    setShowWizard(false);
+  };
+
+  const addConnection = (a, b, type, strength) => {
+    if (!a || !b || a === b) return;
+    setStored((s) => ({
+      ...s,
+      connections: mergeUniqueConnections(s.connections, [
+        {
+          a,
+          b,
+          type: type || "depends_on",
+          strength: Math.max(1, Math.min(10, Number(strength) || 5)),
+        },
+      ]),
+    }));
+  };
+
+  const removeConnection = (a, b) => {
+    const kill = canonicalEdgeKey(a, b);
+    setStored((s) => ({
+      ...s,
+      connections: s.connections.filter((e) => canonicalEdgeKey(e.a, e.b) !== kill),
+    }));
   };
 
   const resetSociety = () => {
@@ -243,16 +325,49 @@ export function SocietyBuilder({ go, onReady }) {
                   ))}
                 </div>
 
-                <div className="mt-6">
+                <div className="mt-6 space-y-3">
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={() => setShowWizard(true)}
+                    iconLeft={<Plus className="h-4 w-4" />}
+                  >
+                    Create Custom Character
+                  </Button>
                   <Button
                     variant="ghost"
                     className="w-full"
                     onClick={() => addFromArchetype("auto")}
                     iconLeft={<Plus className="h-4 w-4" />}
                   >
-                    Add new character
+                    Quick Add (Auto-rickshaw Driver)
                   </Button>
                 </div>
+
+                <Card padding="p-4" className="mt-5">
+                  <div className="font-body text-xs font-semibold uppercase tracking-[0.08em] text-secondary mb-2">
+                    Network Intelligence
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="font-display font-bold text-xl text-primary">{connections.length}</div>
+                      <div className="font-body text-[11px] text-muted">Total links</div>
+                    </div>
+                    <div>
+                      <div className="font-display font-bold text-xl text-primary">{networkStats.economicLinks}</div>
+                      <div className="font-body text-[11px] text-muted">Economic ties</div>
+                    </div>
+                    <div>
+                      <div className={`font-display font-bold text-xl ${networkStats.isolated > 0 ? "text-wave-red" : "text-wave-green"}`}>
+                        {networkStats.isolated}
+                      </div>
+                      <div className="font-body text-[11px] text-muted">Isolated</div>
+                    </div>
+                  </div>
+                  <p className="font-body text-xs text-secondary mt-3">
+                    Avg degree: <span className="font-mono text-primary">{networkStats.avgDegree}</span> links per character.
+                  </p>
+                </Card>
 
                 <p className="font-body text-xs text-muted mt-5 text-center">
                   Click any character on the canvas to edit their profile.
@@ -262,20 +377,66 @@ export function SocietyBuilder({ go, onReady }) {
               <CharacterEditor
                 key={`editor-${selected.id}`}
                 character={selected}
+                characters={characters}
+                connections={connections}
                 onChange={(patch) => updateChar(selected.id, patch)}
                 onClose={() => setSel(null)}
                 onDelete={() => deleteChar(selected.id)}
+                onAddConnection={(targetId, type, strength) =>
+                  addConnection(selected.id, targetId, type, strength)
+                }
+                onRemoveConnection={(targetId) => removeConnection(selected.id, targetId)}
               />
             )}
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Character Wizard Modal */}
+      <AnimatePresence>
+        {showWizard && (
+          <CharacterWizard
+            onCreate={addFromWizard}
+            onCancel={() => setShowWizard(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function CharacterEditor({ character: c, onChange, onClose, onDelete }) {
+function CharacterEditor({
+  character: c,
+  characters,
+  connections,
+  onChange,
+  onClose,
+  onDelete,
+  onAddConnection,
+  onRemoveConnection,
+}) {
   const v = vulnerability(c);
+  const others = characters.filter((x) => x.id !== c.id);
+  const linked = connections
+    .filter((e) => e.a === c.id || e.b === c.id)
+    .map((e) => ({
+      ...e,
+      otherId: e.a === c.id ? e.b : e.a,
+    }));
+
+  const [targetId, setTargetId] = useState(others[0]?.id || null);
+  const [linkType, setLinkType] = useState("depends_on");
+  const [strength, setStrength] = useState(6);
+
+  useEffect(() => {
+   if(!connectable.find((x) => x.id === targetId)){
+     setTargetId(connectable[0]?.id ?? null);
+   }
+  },[c.id, connectable, targetId]);
+
+  const linkedSet = new Set(linked.map((e) => e.otherId));
+  const connectable = others.filter((x) => !linkedSet.has(x.id));
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -366,6 +527,96 @@ function CharacterEditor({ character: c, onChange, onClose, onDelete }) {
         )}
       </div>
 
+      <SectionLabel>Connections</SectionLabel>
+      <div className="space-y-2.5">
+        {linked.map((edge) => {
+          const other = characters.find((x) => x.id === edge.otherId);
+          if (!other) return null;
+          return (
+            <div
+              key={`${edge.a}-${edge.b}`}
+              className="flex items-center justify-between rounded-md border border-subtle bg-surface px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="font-body text-sm text-primary truncate">
+                  {other.emoji} {other.name}
+                </div>
+                <div className="font-mono text-[10px] text-secondary uppercase tracking-[0.08em]">
+                  {edge.type} · strength {edge.strength}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRemoveConnection(edge.otherId)}
+              >
+                Remove
+              </Button>
+            </div>
+          );
+        })}
+        {linked.length === 0 && (
+          <p className="font-body text-xs text-muted">No connections yet.</p>
+        )}
+      </div>
+
+      <div className="mt-3 rounded-md border border-subtle bg-surface p-3 space-y-3">
+        <div className="font-body text-xs font-semibold uppercase tracking-[0.08em] text-secondary">
+          Add Connection
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <select
+            value={targetId ?? ""}
+            onChange={(e) => setTargetId(Number(e.target.value))}
+            className="h-10 rounded-md border border-subtle bg-void px-3 font-body text-sm text-primary outline-none"
+            disabled={connectable.length === 0}
+          >
+            {connectable.length === 0 && <option value="">No unlinked characters</option>}
+            {connectable.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.emoji} {x.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={linkType}
+            onChange={(e) => setLinkType(e.target.value)}
+            className="h-10 rounded-md border border-subtle bg-void px-3 font-body text-sm text-primary outline-none"
+          >
+            <option value="serves">serves</option>
+            <option value="buys_from">buys_from</option>
+            <option value="sells_to">sells_to</option>
+            <option value="depends_on">depends_on</option>
+            <option value="teaches">teaches</option>
+            <option value="patrols">patrols</option>
+            <option value="supplies">supplies</option>
+          </select>
+        </div>
+        <div>
+          <div className="flex items-center justify-between text-xs text-secondary mb-1.5">
+            <span>Strength</span>
+            <span className="font-mono">{strength}/10</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={strength}
+            onChange={(e) => setStrength(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          className="w-full"
+          disabled={!targetId || connectable.length === 0}
+          onClick={() => onAddConnection(targetId, linkType, strength)}
+        >
+          Add link
+        </Button>
+      </div>
+
       <div className="mt-7 pt-4 border-t border-subtle">
         <Button
           variant="danger"
@@ -377,6 +628,104 @@ function CharacterEditor({ character: c, onChange, onClose, onDelete }) {
       </div>
     </motion.div>
   );
+}
+
+function normalizeSocietyState(raw) {
+  const base = {
+    characters: DEMO_CHARACTERS,
+    connections: DEMO_CONNECTIONS,
+  };
+
+  if (!raw || typeof raw !== "object") return { state: base, changed: true };
+
+  let changed = false;
+  const inChars = Array.isArray(raw.characters) ? raw.characters : [];
+  const nextChars = inChars
+    .map((c, idx) => {
+      if (!c || typeof c !== "object") {
+        changed = true;
+        return null;
+      }
+      const idNum = Number(c.id);
+      const id = Number.isFinite(idNum) ? idNum : idx + 1;
+      if (!Number.isFinite(idNum)) changed = true;
+
+      const income = safeNumber(c.income, 20000);
+      const fixed = safeNumber(c.fixed, 9000);
+      const emi = safeNumber(c.emi, 2000);
+      const savings = safeNumber(c.savings, 3000);
+
+      if (
+        income !== c.income ||
+        fixed !== c.fixed ||
+        emi !== c.emi ||
+        savings !== c.savings
+      ) {
+        changed = true;
+      }
+
+      return {
+        id,
+        key: typeof c.key === "string" ? c.key : "custom",
+        emoji: typeof c.emoji === "string" && c.emoji.trim() ? c.emoji : "🙂",
+        name: typeof c.name === "string" && c.name.trim() ? c.name : `Character ${id}`,
+        archetype: typeof c.archetype === "string" && c.archetype.trim() ? c.archetype : "Independent Worker",
+        location: typeof c.location === "string" && c.location.trim() ? c.location : "—",
+        income,
+        fixed,
+        emi,
+        savings,
+        dependencies: Array.isArray(c.dependencies) ? c.dependencies : [],
+        x: Number.isFinite(c.x) ? c.x : undefined,
+        y: Number.isFinite(c.y) ? c.y : undefined,
+      };
+    })
+    .filter(Boolean);
+
+  if (!nextChars.length) {
+    return { state: base, changed: true };
+  }
+
+  const idSet = new Set(nextChars.map((c) => c.id));
+  const inConnections = Array.isArray(raw.connections) ? raw.connections : [];
+  const nextConnections = inConnections
+    .map((e) => {
+      if (!e || typeof e !== "object") {
+        changed = true;
+        return null;
+      }
+      const a = Number(e.a);
+      const b = Number(e.b);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) {
+        changed = true;
+        return null;
+      }
+      if (!idSet.has(a) || !idSet.has(b)) {
+        changed = true;
+        return null;
+      }
+      const strength = Math.max(1, Math.min(10, safeNumber(e.strength, 5)));
+      if (strength !== e.strength) changed = true;
+      return {
+        a,
+        b,
+        type: typeof e.type === "string" && e.type.trim() ? e.type : "depends_on",
+        strength,
+      };
+    })
+    .filter(Boolean);
+
+  const normalizedState = {
+    characters: nextChars,
+    connections: nextConnections,
+  };
+
+  return { state: normalizedState, changed };
+}
+
+function safeNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function SectionLabel({ children }) {
