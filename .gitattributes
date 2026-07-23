@@ -1,0 +1,3 @@
+src/lib/claude.js merge=ours
+vite.config.js merge=ours
+src/screens/SocietyBuilder.jsx merge=ours
